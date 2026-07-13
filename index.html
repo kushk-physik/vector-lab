@@ -38,8 +38,9 @@
     box-shadow:0 8px 30px rgba(0,0,0,0.4);
   }
   #controls{top:16px;left:16px;width:300px;max-height:calc(100vh - 32px);overflow-y:auto;}
-  #readout{top:16px;right:16px;width:260px;}
-  #gizmo{top:267px;right:16px;width:204px;padding:8px;pointer-events:none;}
+  #rightCol{position:absolute;top:16px;right:16px;width:260px;max-height:calc(100vh - 32px);overflow-y:auto;display:flex;flex-direction:column;gap:16px;}
+  #readout{position:relative;width:100%;}
+  #gizmo{position:relative;width:204px;align-self:flex-end;padding:8px;pointer-events:none;}
   #gizmo .gizmoTitle{font-size:9px;text-transform:uppercase;letter-spacing:1px;color:var(--muted);text-align:center;margin-bottom:4px;}
   #gizmoCanvasWrap{width:128px;height:128px;margin:0 auto;}
   #gizmoCanvasWrap canvas{width:100%;height:100%;display:block;}
@@ -88,6 +89,16 @@
   #hint{position:absolute;bottom:16px;right:16px;font-size:11px;color:var(--muted);text-align:right;max-width:260px;}
   ::-webkit-scrollbar{width:6px;}
   ::-webkit-scrollbar-thumb{background:#2c3244;border-radius:3px;}
+  .presetgrid{display:grid;grid-template-columns:repeat(3,1fr);gap:6px;margin-bottom:8px;}
+  .presetgrid button{padding:7px 4px;font-size:11.5px;}
+  .mathbox{font-family:var(--mono);font-size:11px;line-height:1.5;color:var(--text);background:#0e1220;border:1px solid var(--panel-border);border-radius:8px;padding:10px;margin-top:10px;white-space:pre;overflow-x:auto;}
+  #shareMsg{font-size:11px;color:var(--accent3);text-align:center;margin-top:6px;height:14px;}
+  @media (max-width:720px){
+    #controls{width:min(290px, calc(100vw - 24px));max-height:42vh;}
+    #rightCol{width:min(230px, calc(100vw - 24px));top:auto;bottom:16px;left:16px;right:auto;max-height:38vh;}
+    #undoBtn{top:calc(42vh + 28px);}
+    #hint{display:none;}
+  }
 </style>
 </head>
 <body>
@@ -117,6 +128,17 @@
   </div>
 
   <button id="setVectorBtn" style="margin-top:6px;">Set Vector p</button>
+
+  <label style="margin-top:10px;">Quick presets (r kept, θ/φ set)</label>
+  <div class="presetgrid">
+    <button class="secondary" id="presetPX">+X</button>
+    <button class="secondary" id="presetPY">+Y</button>
+    <button class="secondary" id="presetPZ">+Z</button>
+    <button class="secondary" id="presetNX">−X</button>
+    <button class="secondary" id="presetNY">−Y</button>
+    <button class="secondary" id="presetNZ">−Z</button>
+  </div>
+  <button class="secondary" id="presetRandom">🎲 Random Vector</button>
 
   <h3>Rotate p</h3>
   <label>About axis</label>
@@ -192,6 +214,29 @@
     <button class="danger" id="resetBtn">Reset to Defined p</button>
   </div>
 
+  <h3>Second Vector q — Compare</h3>
+  <div class="row tight">
+    <label style="margin:0;display:flex;align-items:center;gap:6px;"><input type="checkbox" id="toggleVec2" style="width:auto;"> Enable second vector q</label>
+  </div>
+  <div id="vec2Fields" style="display:none;">
+    <label>Magnitude r</label>
+    <div class="row tight">
+      <input type="range" id="r2Slider" min="0.1" max="4" step="0.01" value="1.5">
+      <input type="number" id="r2Num" min="0.1" max="4" step="0.01" value="1.5">
+    </div>
+    <label>θ (theta), degrees</label>
+    <div class="row tight">
+      <input type="range" id="theta2Slider" min="0" max="180" step="0.5" value="120">
+      <input type="number" id="theta2Num" min="0" max="180" step="0.5" value="120">
+    </div>
+    <label>φ (phi), degrees</label>
+    <div class="row tight">
+      <input type="range" id="phi2Slider" min="0" max="360" step="0.5" value="200">
+      <input type="number" id="phi2Num" min="0" max="360" step="0.5" value="200">
+    </div>
+    <button id="setVector2Btn" style="background:#e08a3d;">Set Vector q</button>
+  </div>
+
   <h3>Display</h3>
   <div class="row tight">
     <label style="margin:0;display:flex;align-items:center;gap:6px;"><input type="checkbox" id="toggleSphere" checked style="width:auto;"> Guide sphere</label>
@@ -199,8 +244,16 @@
   <div class="row tight">
     <label style="margin:0;display:flex;align-items:center;gap:6px;"><input type="checkbox" id="toggleAngleArc" checked style="width:auto;"> θ/φ angle arcs</label>
   </div>
+  <div class="row tight">
+    <label style="margin:0;display:flex;align-items:center;gap:6px;"><input type="checkbox" id="toggleMath" style="width:auto;"> Show rotation matrix &amp; quaternion</label>
+  </div>
+
+  <h3>Share</h3>
+  <button class="secondary" id="shareBtn">🔗 Copy Share Link</button>
+  <div id="shareMsg"></div>
 </div>
 
+<div id="rightCol">
 <div id="readout" class="panel">
   <h2>Current State</h2>
   <div class="stat"><span class="k"><span class="axisdot" style="background:#ff5c5c;"></span>x</span><span class="v" id="outX">0.000</span></div>
@@ -210,14 +263,29 @@
   <div class="stat"><span class="k">r</span><span class="v" id="outR">0.000</span></div>
   <div class="stat"><span class="k">θ (deg)</span><span class="v" id="outTheta">0.00</span></div>
   <div class="stat"><span class="k">φ (deg)</span><span class="v" id="outPhi">0.00</span></div>
+
+  <div id="vec2Readout" style="display:none;">
+    <h3>Vector q</h3>
+    <div class="stat"><span class="k"><span class="axisdot" style="background:#e08a3d;"></span>x, y, z</span><span class="v" id="outQ">0,0,0</span></div>
+    <h3>p vs q</h3>
+    <div class="stat"><span class="k">p · q (dot)</span><span class="v" id="outDot">0.000</span></div>
+    <div class="stat"><span class="k">angle(p, q)</span><span class="v" id="outAngle">0.00°</span></div>
+    <div class="stat"><span class="k"><span class="axisdot" style="background:#c77dff;"></span>p × q</span><span class="v" id="outCross">0,0,0</span></div>
+  </div>
+
+  <div id="mathPanelWrap" style="display:none;">
+    <h3>Frame Rotation</h3>
+    <div class="mathbox" id="mathBox"></div>
+  </div>
 </div>
 
 <div id="gizmo" class="panel">
   <div class="gizmoTitle">Original orientation</div>
   <div id="gizmoCanvasWrap"></div>
 </div>
+</div>
 
-<div id="hint">Drag to orbit · Scroll to zoom · Right-drag to pan</div>
+<div id="hint">Drag to orbit · Scroll to zoom · Right-drag to pan · Grab the yellow tip to drag p directly</div>
 
 <script>
 (function(){
@@ -414,16 +482,58 @@
   const arrow = new THREE.ArrowHelper(new THREE.Vector3(0,1,0), new THREE.Vector3(0,0,0), 1, 0xffd23d, 0.28, 0.16);
   frameGroup.add(arrow);
 
+  // Draggable handle at the tip of p — lets you grab and drag the vector's
+  // direction directly in 3D instead of only via the θ/φ sliders.
+  const dragHandle = new THREE.Mesh(
+    new THREE.SphereGeometry(1, 16, 16),
+    new THREE.MeshBasicMaterial({color:0xffd23d})
+  );
+  frameGroup.add(dragHandle);
+
   function updateArrow(){
     const len = currentVec.length();
     if(len < 1e-6){
       arrow.setLength(0.0001, 0, 0);
+      dragHandle.visible = false;
       return;
     }
+    dragHandle.visible = true;
     const dir = currentVec.clone().normalize();
     arrow.setDirection(dir);
     arrow.setLength(len, Math.min(0.28, len*0.18), Math.min(0.16, len*0.1));
     guideSphere.scale.setScalar(len);
+    dragHandle.position.copy(currentVec);
+    dragHandle.scale.setScalar(Math.max(0.13, Math.min(0.22, len*0.12)));
+  }
+
+  // ---------- Second vector q, for angle/dot/cross comparisons ----------
+  let currentVec2 = new THREE.Vector3(0,0,0);
+  let definedVec2 = new THREE.Vector3(0,0,0);
+  let vec2Enabled = false;
+
+  const arrow2 = new THREE.ArrowHelper(new THREE.Vector3(0,1,0), new THREE.Vector3(0,0,0), 1, 0xe08a3d, 0.26, 0.15);
+  arrow2.visible = false;
+  frameGroup.add(arrow2);
+
+  const crossArrow = new THREE.ArrowHelper(new THREE.Vector3(0,1,0), new THREE.Vector3(0,0,0), 1, 0xc77dff, 0.22, 0.12);
+  crossArrow.visible = false;
+  frameGroup.add(crossArrow);
+
+  function updateArrow2(){
+    if(!vec2Enabled){ arrow2.visible = false; crossArrow.visible = false; return; }
+    const len2 = currentVec2.length();
+    arrow2.visible = len2 > 1e-6;
+    if(arrow2.visible){
+      arrow2.setDirection(currentVec2.clone().normalize());
+      arrow2.setLength(len2, Math.min(0.26, len2*0.18), Math.min(0.15, len2*0.1));
+    }
+    const cross = currentVec.clone().cross(currentVec2);
+    const clen = cross.length();
+    crossArrow.visible = clen > 1e-6;
+    if(crossArrow.visible){
+      crossArrow.setDirection(cross.clone().normalize());
+      crossArrow.setLength(clen, Math.min(0.22, clen*0.18), Math.min(0.12, clen*0.1));
+    }
   }
 
   // Convention: theta = polar angle between +Z axis and p, phi = azimuthal
@@ -455,6 +565,12 @@
   const outR = document.getElementById('outR');
   const outTheta = document.getElementById('outTheta');
   const outPhi = document.getElementById('outPhi');
+  const outQ = document.getElementById('outQ');
+  const outDot = document.getElementById('outDot');
+  const outAngle = document.getElementById('outAngle');
+  const outCross = document.getElementById('outCross');
+
+  function fmtVec(v){ return `${v.x.toFixed(2)}, ${v.y.toFixed(2)}, ${v.z.toFixed(2)}`; }
 
   function refreshReadout(){
     outX.textContent = currentVec.x.toFixed(3);
@@ -464,6 +580,16 @@
     outR.textContent = s.r.toFixed(3);
     outTheta.textContent = s.theta.toFixed(2);
     outPhi.textContent = s.phi.toFixed(2);
+
+    if(vec2Enabled){
+      outQ.textContent = fmtVec(currentVec2);
+      const dot = currentVec.dot(currentVec2);
+      outDot.textContent = dot.toFixed(3);
+      const denom = currentVec.length() * currentVec2.length();
+      const angle = denom > 1e-9 ? THREE.MathUtils.radToDeg(Math.acos(THREE.MathUtils.clamp(dot/denom, -1, 1))) : 0;
+      outAngle.textContent = angle.toFixed(2) + '°';
+      outCross.textContent = fmtVec(currentVec.clone().cross(currentVec2));
+    }
   }
 
   // ---------- Angle arcs (visual for theta/phi of current vector) ----------
@@ -527,6 +653,7 @@
 
   function fullRefresh(){
     updateArrow();
+    updateArrow2();
     refreshReadout();
     rebuildArcs();
   }
@@ -538,7 +665,10 @@
     history.push({
       vec: currentVec.clone(),
       defined: definedVec.clone(),
-      quat: frameGroup.quaternion.clone()
+      quat: frameGroup.quaternion.clone(),
+      vec2: currentVec2.clone(),
+      defined2: definedVec2.clone(),
+      enabled2: vec2Enabled
     });
     if(history.length > 50) history.shift();
     undoBtn.disabled = false;
@@ -553,6 +683,11 @@
     currentVec.copy(snap.vec);
     definedVec.copy(snap.defined);
     frameGroup.quaternion.copy(snap.quat);
+    currentVec2.copy(snap.vec2);
+    definedVec2.copy(snap.defined2);
+    vec2Enabled = snap.enabled2;
+    document.getElementById('toggleVec2').checked = vec2Enabled;
+    document.getElementById('vec2Readout').style.display = vec2Enabled ? 'block' : 'none';
     fullRefresh();
     undoBtn.disabled = history.length === 0;
   });
@@ -568,14 +703,66 @@
   linkPair('thetaSlider','thetaNum');
   linkPair('phiSlider','phiNum');
   linkPair('angleSlider','angleNum');
+  linkPair('r2Slider','r2Num');
+  linkPair('theta2Slider','theta2Num');
+  linkPair('phi2Slider','phi2Num');
 
-  document.getElementById('setVectorBtn').addEventListener('click', ()=>{
+  function setFieldPair(sliderId, numId, val){
+    document.getElementById(sliderId).value = val;
+    document.getElementById(numId).value = val;
+  }
+
+  function applyVectorPFields(){
     pushHistory();
     const r = parseFloat(document.getElementById('rNum').value);
     const theta = parseFloat(document.getElementById('thetaNum').value);
     const phi = parseFloat(document.getElementById('phiNum').value);
     definedVec = cartesianFromSpherical(r, theta, phi);
     currentVec.copy(definedVec);
+    fullRefresh();
+  }
+
+  document.getElementById('setVectorBtn').addEventListener('click', applyVectorPFields);
+
+  function applyPreset(theta, phi){
+    setFieldPair('thetaSlider','thetaNum', theta);
+    setFieldPair('phiSlider','phiNum', phi);
+    applyVectorPFields();
+  }
+  document.getElementById('presetPX').addEventListener('click', ()=>applyPreset(90, 0));
+  document.getElementById('presetNX').addEventListener('click', ()=>applyPreset(90, 180));
+  document.getElementById('presetPY').addEventListener('click', ()=>applyPreset(90, 90));
+  document.getElementById('presetNY').addEventListener('click', ()=>applyPreset(90, 270));
+  document.getElementById('presetPZ').addEventListener('click', ()=>applyPreset(0, 0));
+  document.getElementById('presetNZ').addEventListener('click', ()=>applyPreset(180, 0));
+  document.getElementById('presetRandom').addEventListener('click', ()=>{
+    setFieldPair('rSlider','rNum', (0.5 + Math.random()*2.5).toFixed(2));
+    setFieldPair('thetaSlider','thetaNum', (Math.random()*180).toFixed(1));
+    setFieldPair('phiSlider','phiNum', (Math.random()*360).toFixed(1));
+    applyVectorPFields();
+  });
+
+  document.getElementById('toggleVec2').addEventListener('change', (e)=>{
+    pushHistory();
+    vec2Enabled = e.target.checked;
+    document.getElementById('vec2Fields').style.display = vec2Enabled ? 'block' : 'none';
+    document.getElementById('vec2Readout').style.display = vec2Enabled ? 'block' : 'none';
+    if(vec2Enabled && currentVec2.length() < 1e-9){
+      const r2 = parseFloat(document.getElementById('r2Num').value);
+      const theta2 = parseFloat(document.getElementById('theta2Num').value);
+      const phi2 = parseFloat(document.getElementById('phi2Num').value);
+      definedVec2 = cartesianFromSpherical(r2, theta2, phi2);
+      currentVec2.copy(definedVec2);
+    }
+    fullRefresh();
+  });
+  document.getElementById('setVector2Btn').addEventListener('click', ()=>{
+    pushHistory();
+    const r2 = parseFloat(document.getElementById('r2Num').value);
+    const theta2 = parseFloat(document.getElementById('theta2Num').value);
+    const phi2 = parseFloat(document.getElementById('phi2Num').value);
+    definedVec2 = cartesianFromSpherical(r2, theta2, phi2);
+    currentVec2.copy(definedVec2);
     fullRefresh();
   });
 
@@ -780,9 +967,146 @@
   });
   document.getElementById('toggleAngleArc').addEventListener('change', rebuildArcs);
 
+  // ---------- Math panel: live rotation matrix + quaternion of the frame ----------
+  const mathPanelWrap = document.getElementById('mathPanelWrap');
+  const mathBox = document.getElementById('mathBox');
+  let mathPanelOn = false;
+  document.getElementById('toggleMath').addEventListener('change', (e)=>{
+    mathPanelOn = e.target.checked;
+    mathPanelWrap.style.display = mathPanelOn ? 'block' : 'none';
+    updateMathPanel();
+  });
+  function updateMathPanel(){
+    if(!mathPanelOn) return;
+    const q = frameGroup.quaternion;
+    const m = new THREE.Matrix4().makeRotationFromQuaternion(q);
+    const e = m.elements; // column-major
+    const row = (r) => `${e[r].toFixed(3).padStart(7)} ${e[r+4].toFixed(3).padStart(7)} ${e[r+8].toFixed(3).padStart(7)}`;
+    mathBox.textContent =
+`quaternion (x, y, z, w)
+${q.x.toFixed(4)}  ${q.y.toFixed(4)}  ${q.z.toFixed(4)}  ${q.w.toFixed(4)}
+
+rotation matrix
+${row(0)}
+${row(1)}
+${row(2)}`;
+  }
+
+  // ---------- Share: encode state into the URL hash ----------
+  function encodeState(){
+    const q = frameGroup.quaternion;
+    const state = {
+      v: [currentVec.x, currentVec.y, currentVec.z],
+      d: [definedVec.x, definedVec.y, definedVec.z],
+      q: [q.x, q.y, q.z, q.w],
+      e2: vec2Enabled,
+      v2: [currentVec2.x, currentVec2.y, currentVec2.z],
+      d2: [definedVec2.x, definedVec2.y, definedVec2.z]
+    };
+    return btoa(JSON.stringify(state));
+  }
+  function applyDecodedState(state){
+    currentVec.set(state.v[0], state.v[1], state.v[2]);
+    definedVec.set(state.d[0], state.d[1], state.d[2]);
+    frameGroup.quaternion.set(state.q[0], state.q[1], state.q[2], state.q[3]);
+    vec2Enabled = !!state.e2;
+    currentVec2.set(state.v2[0], state.v2[1], state.v2[2]);
+    definedVec2.set(state.d2[0], state.d2[1], state.d2[2]);
+
+    const sD = sphericalFromCartesian(definedVec);
+    setFieldPair('rSlider','rNum', sD.r.toFixed(2));
+    setFieldPair('thetaSlider','thetaNum', sD.theta.toFixed(1));
+    setFieldPair('phiSlider','phiNum', sD.phi.toFixed(1));
+
+    const sD2 = sphericalFromCartesian(definedVec2);
+    setFieldPair('r2Slider','r2Num', sD2.r.toFixed(2));
+    setFieldPair('theta2Slider','theta2Num', sD2.theta.toFixed(1));
+    setFieldPair('phi2Slider','phi2Num', sD2.phi.toFixed(1));
+
+    document.getElementById('toggleVec2').checked = vec2Enabled;
+    document.getElementById('vec2Fields').style.display = vec2Enabled ? 'block' : 'none';
+    document.getElementById('vec2Readout').style.display = vec2Enabled ? 'block' : 'none';
+  }
+  function loadStateFromURL(){
+    if(!location.hash.startsWith('#s=')) return false;
+    try{
+      const state = JSON.parse(atob(decodeURIComponent(location.hash.slice(3))));
+      applyDecodedState(state);
+      return true;
+    }catch(err){
+      return false;
+    }
+  }
+  const shareMsg = document.getElementById('shareMsg');
+  document.getElementById('shareBtn').addEventListener('click', async ()=>{
+    const url = `${location.origin}${location.pathname}#s=${encodeURIComponent(encodeState())}`;
+    try{
+      await navigator.clipboard.writeText(url);
+      shareMsg.textContent = 'Link copied!';
+    }catch(err){
+      shareMsg.textContent = url;
+    }
+    setTimeout(()=>{ shareMsg.textContent = ''; }, 2500);
+  });
+
+  // ---------- Drag the vector tip directly in 3D ----------
+  const raycaster = new THREE.Raycaster();
+  const pointerNDC = new THREE.Vector2();
+  let draggingTip = false;
+
+  function setPointerNDC(evt){
+    const rect = renderer.domElement.getBoundingClientRect();
+    pointerNDC.x = ((evt.clientX - rect.left) / rect.width) * 2 - 1;
+    pointerNDC.y = -((evt.clientY - rect.top) / rect.height) * 2 + 1;
+  }
+
+  renderer.domElement.addEventListener('pointerdown', (evt)=>{
+    if(currentVec.length() < 1e-6) return;
+    setPointerNDC(evt);
+    raycaster.setFromCamera(pointerNDC, camera);
+    const hit = raycaster.intersectObject(dragHandle)[0];
+    if(!hit) return;
+    draggingTip = true;
+    controls.enabled = false;
+    renderer.domElement.style.cursor = 'grabbing';
+    pushHistory();
+    evt.preventDefault();
+  });
+
+  window.addEventListener('pointermove', (evt)=>{
+    if(!draggingTip){
+      // hover feedback only
+      setPointerNDC(evt);
+      raycaster.setFromCamera(pointerNDC, camera);
+      const hit = raycaster.intersectObject(dragHandle)[0];
+      renderer.domElement.style.cursor = hit ? 'grab' : 'default';
+      return;
+    }
+    setPointerNDC(evt);
+    raycaster.setFromCamera(pointerNDC, camera);
+    const radius = currentVec.length();
+    const sphere = new THREE.Sphere(new THREE.Vector3(0,0,0), radius);
+    const hitPoint = new THREE.Vector3();
+    if(raycaster.ray.intersectSphere(sphere, hitPoint)){
+      const local = frameGroup.worldToLocal(hitPoint.clone());
+      local.setLength(radius);
+      currentVec.copy(local);
+      fullRefresh();
+    }
+  });
+
+  window.addEventListener('pointerup', ()=>{
+    if(!draggingTip) return;
+    draggingTip = false;
+    controls.enabled = true;
+    renderer.domElement.style.cursor = 'default';
+  });
+
   // ---------- init ----------
-  definedVec = cartesianFromSpherical(2, 60, 45);
-  currentVec.copy(definedVec);
+  if(!loadStateFromURL()){
+    definedVec = cartesianFromSpherical(2, 60, 45);
+    currentVec.copy(definedVec);
+  }
   fullRefresh();
 
   // ---------- render loop ----------
@@ -796,6 +1120,7 @@
     requestAnimationFrame(animate);
     controls.update();
     updateFrameLabels();
+    updateMathPanel();
     renderer.render(scene, camera);
     updateGizmo();
   }
