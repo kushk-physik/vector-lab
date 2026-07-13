@@ -21,13 +21,19 @@ https://<your-username>.github.io/<repo-name>/
 - Once the frame is rotated, the original X/Y/Z axes stay as dashed reference lines while the new axes (solid, X′/Y′/Z′) show where things ended up.
 - A small inset gizmo always shows the original orientation, so you don't lose track of where you started.
 - Angle arcs drawn directly on the vector for θ and φ.
+- Direction-angle arcs traced right on the guide sphere itself, from the tip of p to the +X, +Y, and +Z points — each one shows the angle p makes with that axis, so tracing the arc is tracing the angle.
+- An optional second vector q, for comparing against p: dot product, the angle between them, and a live cross-product arrow.
+- Drag the tip of the vector directly in the 3D scene to change its direction, instead of only using the θ/φ sliders.
+- Quick presets (±X/±Y/±Z, random vector) and a share-link button that encodes the whole current state into the URL.
+- An optional panel showing the frame's live rotation matrix and quaternion.
 - Undo for the last action.
 - Scale, normalize, negate helpers.
 - Orbit camera: drag to rotate, scroll to zoom, right-drag to pan.
+- Mobile-friendly layout: below ~720px wide, the control and stats panels collapse into slide-in drawers (☰ and 🧭 buttons) so the 3D scene isn't buried under fixed panels on a phone.
 
 ## Why this exists
 
-Rotating a vector about some arbitrary axis doesn't change θ and φ by simple amounts unless that axis happens to be the polar axis. The coupling between θ and φ under rotations about X or Y comes straight out of spherical trig, and it's easy to get wrong by hand. This tool lets you just watch it happen instead of computing it and hoping you didn't make a sign error.
+This came out of my own research, where I kept running into vector rotations, reflections, and angle transformations in spherical coordinates. Working them out on paper with rotation matrices is straightforward enough, but it's much easier to reason about them — and to catch mistakes — when you can actually see the transformation happen instead of just trusting the algebra. So I built this as a tool I could reach for whenever I needed to visualize a vector transformation in spherical coordinates, rather than working it out by hand each time.
 
 ## Built with
 

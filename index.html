@@ -93,16 +93,39 @@
   .presetgrid button{padding:7px 4px;font-size:11.5px;}
   .mathbox{font-family:var(--mono);font-size:11px;line-height:1.5;color:var(--text);background:#0e1220;border:1px solid var(--panel-border);border-radius:8px;padding:10px;margin-top:10px;white-space:pre;overflow-x:auto;}
   #shareMsg{font-size:11px;color:var(--accent3);text-align:center;margin-top:6px;height:14px;}
+  .drawerToggle{
+    display:none;
+    position:fixed;top:16px;z-index:60;width:44px;height:44px;border-radius:50%;
+    background:var(--panel);border:1px solid var(--panel-border);color:var(--text);
+    align-items:center;justify-content:center;font-size:19px;cursor:pointer;
+    box-shadow:0 8px 20px rgba(0,0,0,0.4);
+  }
+  #menuToggleBtn{left:16px;}
+  #statsToggleBtn{right:16px;}
+  #drawerBackdrop{display:none;position:fixed;inset:0;background:rgba(0,0,0,0.55);z-index:40;}
   @media (max-width:720px){
-    #controls{width:min(290px, calc(100vw - 24px));max-height:42vh;}
-    #rightCol{width:min(230px, calc(100vw - 24px));top:auto;bottom:16px;left:16px;right:auto;max-height:38vh;}
-    #undoBtn{top:calc(42vh + 28px);}
+    .drawerToggle{display:flex;}
+    #controls{
+      position:fixed;top:0;left:0;height:100vh;max-height:100vh;width:86vw;max-width:340px;
+      border-radius:0;transform:translateX(-100%);transition:transform .25s ease;z-index:50;
+    }
+    #controls.open{transform:translateX(0);}
+    #rightCol{
+      position:fixed;top:0;right:0;left:auto;bottom:auto;height:100vh;max-height:100vh;
+      width:86vw;max-width:300px;transform:translateX(100%);transition:transform .25s ease;z-index:50;
+    }
+    #rightCol.open{transform:translateX(0);}
+    #gizmo{align-self:center;}
     #hint{display:none;}
   }
 </style>
 </head>
 <body>
 <div id="scene"></div>
+
+<button id="menuToggleBtn" class="drawerToggle" aria-label="Open controls">☰</button>
+<button id="statsToggleBtn" class="drawerToggle" aria-label="Open stats and orientation">🧭</button>
+<div id="drawerBackdrop"></div>
 
 <button id="undoBtn" disabled>↩ Undo Last Action</button>
 
@@ -243,6 +266,9 @@
   </div>
   <div class="row tight">
     <label style="margin:0;display:flex;align-items:center;gap:6px;"><input type="checkbox" id="toggleAngleArc" checked style="width:auto;"> θ/φ angle arcs</label>
+  </div>
+  <div class="row tight">
+    <label style="margin:0;display:flex;align-items:center;gap:6px;"><input type="checkbox" id="toggleDirArcs" checked style="width:auto;"> Direction arcs (p to X/Y/Z, on sphere)</label>
   </div>
   <div class="row tight">
     <label style="margin:0;display:flex;align-items:center;gap:6px;"><input type="checkbox" id="toggleMath" style="width:auto;"> Show rotation matrix &amp; quaternion</label>
@@ -651,11 +677,59 @@
     }
   }
 
+  // ---------- Direction-angle arcs: geodesics on the guide sphere itself,
+  // from the tip of p to each of the +X, +Y, +Z axis points. Tracing one of
+  // these arcs traces out the angle between p and that axis directly (the
+  // "direction angles" alpha/beta/gamma, where cos(alpha) = x/r, etc).
+  const dirArcGroup = new THREE.Group();
+  frameGroup.add(dirArcGroup);
+  const DIR_AXES = [
+    {dir:new THREE.Vector3(1,0,0), colorNum:0xff5c5c, colorStr:'#ff5c5c', label:'X'},
+    {dir:new THREE.Vector3(0,1,0), colorNum:0x5cff8a, colorStr:'#5cff8a', label:'Y'},
+    {dir:new THREE.Vector3(0,0,1), colorNum:0x5c9bff, colorStr:'#5c9bff', label:'Z'}
+  ];
+  function rebuildDirArcs(){
+    dirArcGroup.clear();
+    if(!document.getElementById('toggleDirArcs').checked) return;
+    const len = currentVec.length();
+    if(len < 1e-6) return;
+    const u1 = currentVec.clone().normalize();
+    const segments = 48;
+
+    DIR_AXES.forEach(({dir, colorNum, colorStr, label})=>{
+      const dot = THREE.MathUtils.clamp(u1.dot(dir), -1, 1);
+      const omega = Math.acos(dot);
+      // Skip when p is (anti)parallel to this axis: the great circle through
+      // the two points isn't uniquely defined, and there's no angle to trace.
+      if(omega < 1e-3 || omega > Math.PI - 1e-3) return;
+      const sinOmega = Math.sin(omega);
+      const pts = [];
+      for(let i=0;i<=segments;i++){
+        const t = i/segments;
+        // Spherical linear interpolation between two unit vectors, which
+        // traces the shorter great-circle arc connecting them.
+        const a = Math.sin((1-t)*omega)/sinOmega;
+        const b = Math.sin(t*omega)/sinOmega;
+        pts.push(new THREE.Vector3().addScaledVector(u1,a).addScaledVector(dir,b).multiplyScalar(len));
+      }
+      const geo = new THREE.BufferGeometry().setFromPoints(pts);
+      const mat = new THREE.LineBasicMaterial({color:colorNum});
+      dirArcGroup.add(new THREE.Line(geo, mat));
+
+      const angleDeg = THREE.MathUtils.radToDeg(omega);
+      const midPt = pts[Math.floor(segments/2)].clone().normalize().multiplyScalar(len*1.1);
+      const dirLabel = makeTextSprite(`∠${label} = ${angleDeg.toFixed(1)}°`, colorStr, {canvasWidth:160, canvasHeight:56, fontSize:30, scaleW:0.5, scaleH:0.175});
+      dirLabel.position.copy(midPt);
+      dirArcGroup.add(dirLabel);
+    });
+  }
+
   function fullRefresh(){
     updateArrow();
     updateArrow2();
     refreshReadout();
     rebuildArcs();
+    rebuildDirArcs();
   }
 
   // ---------- Undo history ----------
@@ -966,6 +1040,28 @@
     guideSphere.visible = e.target.checked;
   });
   document.getElementById('toggleAngleArc').addEventListener('change', rebuildArcs);
+  document.getElementById('toggleDirArcs').addEventListener('change', rebuildDirArcs);
+
+  // ---------- Mobile drawers: controls / stats+gizmo slide in on demand ----------
+  const controlsEl = document.getElementById('controls');
+  const rightColEl = document.getElementById('rightCol');
+  const drawerBackdrop = document.getElementById('drawerBackdrop');
+  function closeDrawers(){
+    controlsEl.classList.remove('open');
+    rightColEl.classList.remove('open');
+    drawerBackdrop.style.display = 'none';
+  }
+  function toggleDrawer(el){
+    const wasOpen = el.classList.contains('open');
+    closeDrawers();
+    if(!wasOpen){
+      el.classList.add('open');
+      drawerBackdrop.style.display = 'block';
+    }
+  }
+  document.getElementById('menuToggleBtn').addEventListener('click', ()=>toggleDrawer(controlsEl));
+  document.getElementById('statsToggleBtn').addEventListener('click', ()=>toggleDrawer(rightColEl));
+  drawerBackdrop.addEventListener('click', closeDrawers);
 
   // ---------- Math panel: live rotation matrix + quaternion of the frame ----------
   const mathPanelWrap = document.getElementById('mathPanelWrap');
