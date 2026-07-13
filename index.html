@@ -325,6 +325,9 @@
   const renderer = new THREE.WebGLRenderer({antialias:true});
   renderer.setSize(window.innerWidth, window.innerHeight);
   renderer.setPixelRatio(window.devicePixelRatio);
+  // Stop the browser from hijacking touch gestures on the canvas as page
+  // scroll/pan (which on mobile can abort our pointer sequence mid-drag).
+  renderer.domElement.style.touchAction = 'none';
   container.appendChild(renderer.domElement);
 
   const controls = new THREE.OrbitControls(camera, renderer.domElement);
@@ -1197,12 +1200,30 @@ ${row(2)}`;
     }
   });
 
-  window.addEventListener('pointerup', ()=>{
+  function releaseTipDrag(){
     if(!draggingTip) return;
     draggingTip = false;
     controls.enabled = true;
     renderer.domElement.style.cursor = 'default';
     arrow.setColor(ARROW_COLOR);
+  }
+  window.addEventListener('pointerup', releaseTipDrag);
+  // Mobile browsers fire pointercancel (not pointerup) when a touch gesture
+  // gets interrupted mid-drag — e.g. the OS decides it's a scroll instead.
+  // Without this, draggingTip and controls.enabled=false get stuck forever.
+  window.addEventListener('pointercancel', releaseTipDrag);
+
+  // requestAnimationFrame is paused while the tab/page is hidden (screen
+  // lock, app switch, backgrounded tab). If a rotation animation or a tip
+  // drag was in flight when that happened, its "in progress" flag never
+  // gets cleared — which then silently blocks every future rotation attempt,
+  // since animateRotation()/animateFrameToQuaternion() bail out early while
+  // their flag is still true. Reset everything once the page is visible again.
+  document.addEventListener('visibilitychange', ()=>{
+    if(document.hidden) return;
+    animating = false;
+    frameAnimating = false;
+    releaseTipDrag();
   });
 
   // ---------- init ----------
