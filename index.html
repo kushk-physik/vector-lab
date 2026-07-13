@@ -1,0 +1,806 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Vector Lab — 3D Spherical Vector & Rotations</title>
+<meta name="description" content="An interactive 3D playground for spherical vectors: define a vector by (r, θ, φ), rotate or reflect it, rotate the whole reference frame, and watch the angles update live — with an always-on gizmo showing the original orientation.">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta property="og:title" content="Vector Lab — 3D Spherical Vector & Rotations">
+<meta property="og:description" content="Define a 3D vector by (r, θ, φ), rotate/reflect it or the whole frame, and watch the spherical angles update live.">
+<meta property="og:type" content="website">
+<meta property="og:image" content="screenshot.png">
+<meta name="theme-color" content="#0b0e14">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ctext y='.9em' font-size='90'%3E%F0%9F%A7%AD%3C/text%3E%3C/svg%3E">
+<script src="https://cdn.jsdelivr.net/npm/three@0.134.0/build/three.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.134.0/examples/js/controls/OrbitControls.js"></script>
+<style>
+  :root{
+    --bg:#0b0e14;
+    --panel:#131722;
+    --panel-border:#232837;
+    --text:#e6e9f0;
+    --muted:#8b93a7;
+    --accent:#5b8cff;
+    --accent2:#ff6b6b;
+    --accent3:#3ddc97;
+    --mono: 'SF Mono', 'Menlo', 'Consolas', monospace;
+  }
+  *{box-sizing:border-box;}
+  html,body{margin:0;padding:0;height:100%;background:var(--bg);color:var(--text);font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;overflow:hidden;}
+  #scene{position:absolute;inset:0;}
+  .panel{
+    position:absolute;
+    background:rgba(19,23,34,0.92);
+    border:1px solid var(--panel-border);
+    border-radius:12px;
+    padding:16px 18px;
+    backdrop-filter: blur(8px);
+    box-shadow:0 8px 30px rgba(0,0,0,0.4);
+  }
+  #controls{top:16px;left:16px;width:300px;max-height:calc(100vh - 32px);overflow-y:auto;}
+  #readout{top:16px;right:16px;width:260px;}
+  #gizmo{top:267px;right:16px;width:204px;padding:8px;pointer-events:none;}
+  #gizmo .gizmoTitle{font-size:9px;text-transform:uppercase;letter-spacing:1px;color:var(--muted);text-align:center;margin-bottom:4px;}
+  #gizmoCanvasWrap{width:128px;height:128px;margin:0 auto;}
+  #gizmoCanvasWrap canvas{width:100%;height:100%;display:block;}
+  h2{font-size:13px;text-transform:uppercase;letter-spacing:1px;color:var(--muted);margin:0 0 10px;font-weight:600;}
+  h3{font-size:12px;text-transform:uppercase;letter-spacing:0.5px;color:var(--muted);margin:18px 0 8px;font-weight:600;border-top:1px solid var(--panel-border);padding-top:14px;}
+  h3:first-of-type{border-top:none;padding-top:0;margin-top:0;}
+  label{display:block;font-size:12px;color:var(--muted);margin-bottom:4px;}
+  .row{display:flex;gap:8px;align-items:center;margin-bottom:10px;}
+  .row.tight{margin-bottom:6px;}
+  input[type=range]{flex:1;accent-color:var(--accent);}
+  input[type=number]{
+    width:64px;background:#0e1220;border:1px solid var(--panel-border);color:var(--text);
+    border-radius:6px;padding:4px 6px;font-size:12px;font-family:var(--mono);
+  }
+  select{
+    background:#0e1220;border:1px solid var(--panel-border);color:var(--text);
+    border-radius:6px;padding:6px 8px;font-size:12px;width:100%;
+  }
+  button{
+    background:var(--accent);color:#fff;border:none;border-radius:8px;
+    padding:9px 12px;font-size:12.5px;font-weight:600;cursor:pointer;width:100%;
+    transition:transform .1s, background .15s;
+  }
+  button:hover{background:#4676e8;}
+  button:active{transform:scale(0.97);}
+  button:disabled{opacity:0.4;cursor:not-allowed;}
+  button:disabled:hover{background:var(--accent);}
+  #undoBtn{
+    position:absolute;top:16px;left:50%;transform:translateX(-50%);
+    width:auto;z-index:10;background:var(--panel);border:1px solid var(--panel-border);
+    color:var(--text);padding:10px 20px;
+  }
+  #undoBtn:hover:not(:disabled){background:#1a1f2e;}
+  #undoBtn:disabled:hover{background:var(--panel);}
+  button.secondary{background:#232837;color:var(--text);}
+  button.secondary:hover{background:#2c3244;}
+  button.danger{background:#3a2430;color:var(--accent2);}
+  button.danger:hover{background:#452a37;}
+  .btnrow{display:flex;gap:8px;margin-bottom:8px;}
+  .btnrow button{flex:1;}
+  .val{font-family:var(--mono);font-size:12px;color:var(--accent3);min-width:44px;text-align:right;}
+  .stat{display:flex;justify-content:space-between;font-family:var(--mono);font-size:13px;padding:3px 0;}
+  .stat .k{color:var(--muted);}
+  .stat .v{color:var(--text);}
+  .axisdot{display:inline-block;width:8px;height:8px;border-radius:50%;margin-right:6px;}
+  #hint{position:absolute;bottom:16px;right:16px;font-size:11px;color:var(--muted);text-align:right;max-width:260px;}
+  ::-webkit-scrollbar{width:6px;}
+  ::-webkit-scrollbar-thumb{background:#2c3244;border-radius:3px;}
+</style>
+</head>
+<body>
+<div id="scene"></div>
+
+<button id="undoBtn" disabled>↩ Undo Last Action</button>
+
+<div id="controls" class="panel">
+  <h2>Vector p — Spherical Definition</h2>
+
+  <label>Magnitude r</label>
+  <div class="row tight">
+    <input type="range" id="rSlider" min="0.1" max="4" step="0.01" value="2">
+    <input type="number" id="rNum" min="0.1" max="4" step="0.01" value="2">
+  </div>
+
+  <label>θ (theta) — angle between +Z axis and p, degrees</label>
+  <div class="row tight">
+    <input type="range" id="thetaSlider" min="0" max="180" step="0.5" value="60">
+    <input type="number" id="thetaNum" min="0" max="180" step="0.5" value="60">
+  </div>
+
+  <label>φ (phi) — azimuthal angle in XY plane, from +X toward +Y, degrees</label>
+  <div class="row tight">
+    <input type="range" id="phiSlider" min="0" max="360" step="0.5" value="45">
+    <input type="number" id="phiNum" min="0" max="360" step="0.5" value="45">
+  </div>
+
+  <button id="setVectorBtn" style="margin-top:6px;">Set Vector p</button>
+
+  <h3>Rotate p</h3>
+  <label>About axis</label>
+  <select id="axisSelect">
+    <option value="x">X axis</option>
+    <option value="y">Y axis</option>
+    <option value="z">Z axis</option>
+    <option value="custom">Custom axis (nx, ny, nz)</option>
+  </select>
+
+  <div id="customAxisRow" class="row tight" style="display:none;margin-top:8px;">
+    <input type="number" id="nx" step="0.1" value="1" style="width:56px" placeholder="nx">
+    <input type="number" id="ny" step="0.1" value="1" style="width:56px" placeholder="ny">
+    <input type="number" id="nz" step="0.1" value="0" style="width:56px" placeholder="nz">
+  </div>
+
+  <label style="margin-top:8px;">Angle (degrees)</label>
+  <div class="row tight">
+    <input type="range" id="angleSlider" min="-180" max="180" step="1" value="30">
+    <input type="number" id="angleNum" min="-180" max="180" step="1" value="30">
+  </div>
+  <button id="rotateBtn">Apply Rotation</button>
+
+  <h3>Reflect p</h3>
+  <label>Across plane</label>
+  <select id="reflectPlaneSelect">
+    <option value="xy">XY plane (flips Z)</option>
+    <option value="yz">YZ plane (flips X)</option>
+    <option value="xz">XZ plane (flips Y)</option>
+    <option value="custom">Custom plane (normal nx, ny, nz)</option>
+  </select>
+
+  <div id="reflectCustomRow" class="row tight" style="display:none;margin-top:8px;">
+    <input type="number" id="rnx" step="0.1" value="0" style="width:56px" placeholder="nx">
+    <input type="number" id="rny" step="0.1" value="0" style="width:56px" placeholder="ny">
+    <input type="number" id="rnz" step="0.1" value="1" style="width:56px" placeholder="nz">
+  </div>
+  <button id="reflectBtn" style="margin-top:8px;">Apply Reflection</button>
+
+  <h3>Rotate Frame (axes + p together)</h3>
+  <label>About axis</label>
+  <select id="frameAxisSelect">
+    <option value="x">X axis</option>
+    <option value="y">Y axis</option>
+    <option value="z">Z axis</option>
+    <option value="custom">Custom axis (nx, ny, nz)</option>
+  </select>
+
+  <div id="frameCustomAxisRow" class="row tight" style="display:none;margin-top:8px;">
+    <input type="number" id="fnx" step="0.1" value="1" style="width:56px" placeholder="nx">
+    <input type="number" id="fny" step="0.1" value="1" style="width:56px" placeholder="ny">
+    <input type="number" id="fnz" step="0.1" value="0" style="width:56px" placeholder="nz">
+  </div>
+
+  <label style="margin-top:8px;">Angle (degrees)</label>
+  <div class="row tight">
+    <input type="range" id="frameAngleSlider" min="-180" max="180" step="1" value="90">
+    <input type="number" id="frameAngleNum" min="-180" max="180" step="1" value="90">
+  </div>
+  <button id="frameRotateBtn">Apply Frame Rotation</button>
+  <button class="secondary" id="resetFrameBtn" style="margin-top:8px;">Reset Frame Orientation</button>
+
+  <h3>Transform</h3>
+  <div class="btnrow">
+    <button class="secondary" id="scaleUpBtn">Scale ×1.25</button>
+    <button class="secondary" id="scaleDownBtn">Scale ×0.8</button>
+  </div>
+  <div class="btnrow">
+    <button class="secondary" id="normalizeBtn">Normalize</button>
+    <button class="secondary" id="negateBtn">Negate (−p)</button>
+  </div>
+  <div class="btnrow">
+    <button class="danger" id="resetBtn">Reset to Defined p</button>
+  </div>
+
+  <h3>Display</h3>
+  <div class="row tight">
+    <label style="margin:0;display:flex;align-items:center;gap:6px;"><input type="checkbox" id="toggleSphere" checked style="width:auto;"> Guide sphere</label>
+  </div>
+  <div class="row tight">
+    <label style="margin:0;display:flex;align-items:center;gap:6px;"><input type="checkbox" id="toggleAngleArc" checked style="width:auto;"> θ/φ angle arcs</label>
+  </div>
+</div>
+
+<div id="readout" class="panel">
+  <h2>Current State</h2>
+  <div class="stat"><span class="k"><span class="axisdot" style="background:#ff5c5c;"></span>x</span><span class="v" id="outX">0.000</span></div>
+  <div class="stat"><span class="k"><span class="axisdot" style="background:#5cff8a;"></span>y</span><span class="v" id="outY">0.000</span></div>
+  <div class="stat"><span class="k"><span class="axisdot" style="background:#5c9bff;"></span>z</span><span class="v" id="outZ">0.000</span></div>
+  <h3 style="margin-top:14px;">Spherical (θ from +Z, φ from +X→+Y)</h3>
+  <div class="stat"><span class="k">r</span><span class="v" id="outR">0.000</span></div>
+  <div class="stat"><span class="k">θ (deg)</span><span class="v" id="outTheta">0.00</span></div>
+  <div class="stat"><span class="k">φ (deg)</span><span class="v" id="outPhi">0.00</span></div>
+</div>
+
+<div id="gizmo" class="panel">
+  <div class="gizmoTitle">Original orientation</div>
+  <div id="gizmoCanvasWrap"></div>
+</div>
+
+<div id="hint">Drag to orbit · Scroll to zoom · Right-drag to pan</div>
+
+<script>
+(function(){
+  const container = document.getElementById('scene');
+  const scene = new THREE.Scene();
+  scene.background = new THREE.Color(0x0b0e14);
+
+  const camera = new THREE.PerspectiveCamera(50, window.innerWidth/window.innerHeight, 0.01, 1000);
+  camera.position.set(5, 4, 6);
+
+  const renderer = new THREE.WebGLRenderer({antialias:true});
+  renderer.setSize(window.innerWidth, window.innerHeight);
+  renderer.setPixelRatio(window.devicePixelRatio);
+  container.appendChild(renderer.domElement);
+
+  const controls = new THREE.OrbitControls(camera, renderer.domElement);
+  controls.enableDamping = true;
+  controls.dampingFactor = 0.08;
+
+  scene.add(new THREE.AmbientLight(0xffffff, 0.9));
+  const dl = new THREE.DirectionalLight(0xffffff, 0.6);
+  dl.position.set(5,8,4);
+  scene.add(dl);
+
+  // ---------- Frame group: everything that rotates together (axes, labels,
+  // grid, guide sphere, angle arcs, and the vector p itself) ----------
+  const frameGroup = new THREE.Group();
+  scene.add(frameGroup);
+
+  // ---------- Grid ----------
+  const grid = new THREE.GridHelper(8, 16, 0x232837, 0x1a1e29);
+  frameGroup.add(grid);
+
+  // ---------- Axes ----------
+  const AXIS_LEN = 4;
+  function makeAxis(dir, color){
+    const mat = new THREE.LineBasicMaterial({color});
+    const geo = new THREE.BufferGeometry().setFromPoints([
+      new THREE.Vector3(-dir.x*AXIS_LEN, -dir.y*AXIS_LEN, -dir.z*AXIS_LEN),
+      new THREE.Vector3(dir.x*AXIS_LEN, dir.y*AXIS_LEN, dir.z*AXIS_LEN)
+    ]);
+    return new THREE.Line(geo, mat);
+  }
+  frameGroup.add(makeAxis(new THREE.Vector3(1,0,0), 0xff5c5c));
+  frameGroup.add(makeAxis(new THREE.Vector3(0,1,0), 0x5cff8a));
+  frameGroup.add(makeAxis(new THREE.Vector3(0,0,1), 0x5c9bff));
+
+  // ---------- Original axes reference (main window) ----------
+  // Permanently fixed at the starting orientation, dashed, always labeled
+  // X/Y/Z — added to the SCENE directly (not frameGroup), so frame rotations
+  // never move them. Only shown once the frame has actually been
+  // transformed away from identity, so there's no redundant overlap with
+  // the (solid) transformed axes when nothing has changed yet.
+  const originalAxesGroup = new THREE.Group();
+  originalAxesGroup.visible = false;
+  scene.add(originalAxesGroup);
+  // Original axes are drawn slightly longer than the transformed ones, so
+  // that if a transformed axis ever ends up pointing along a DIFFERENT
+  // original axis's direction (e.g. after a 90 degree rotation), the two
+  // labels land at different distances from the origin instead of exactly
+  // on top of each other.
+  const ORIGINAL_AXIS_LEN = AXIS_LEN * 1.22;
+  function makeOriginalAxis(dir, color){
+    const mat = new THREE.LineDashedMaterial({color, dashSize:0.18, gapSize:0.12});
+    const geo = new THREE.BufferGeometry().setFromPoints([
+      new THREE.Vector3(-dir.x*ORIGINAL_AXIS_LEN, -dir.y*ORIGINAL_AXIS_LEN, -dir.z*ORIGINAL_AXIS_LEN),
+      new THREE.Vector3(dir.x*ORIGINAL_AXIS_LEN, dir.y*ORIGINAL_AXIS_LEN, dir.z*ORIGINAL_AXIS_LEN)
+    ]);
+    const line = new THREE.Line(geo, mat);
+    line.computeLineDistances();
+    return line;
+  }
+  originalAxesGroup.add(makeOriginalAxis(new THREE.Vector3(1,0,0), 0xff5c5c));
+  originalAxesGroup.add(makeOriginalAxis(new THREE.Vector3(0,1,0), 0x5cff8a));
+  originalAxesGroup.add(makeOriginalAxis(new THREE.Vector3(0,0,1), 0x5c9bff));
+  const origLabelOpts = {scaleW:0.6, scaleH:0.3};
+  const origXLabel = makeTextSprite('X', '#ff5c5c', origLabelOpts); origXLabel.position.set(ORIGINAL_AXIS_LEN+0.35,0,0); originalAxesGroup.add(origXLabel);
+  const origYLabel = makeTextSprite('Y', '#5cff8a', origLabelOpts); origYLabel.position.set(0,ORIGINAL_AXIS_LEN+0.35,0); originalAxesGroup.add(origYLabel);
+  const origZLabel = makeTextSprite('Z', '#5c9bff', origLabelOpts); origZLabel.position.set(0,0,ORIGINAL_AXIS_LEN+0.35); originalAxesGroup.add(origZLabel);
+
+  function drawSpriteLabel(ctx, text, color, canvasW, canvasH, fontSize){
+    ctx.clearRect(0, 0, canvasW, canvasH);
+    ctx.font = `bold ${fontSize}px sans-serif`;
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    // Dark outline behind the fill so the label stays legible against
+    // busy/bright parts of the scene, regardless of what's behind it.
+    ctx.lineWidth = fontSize * 0.16;
+    ctx.strokeStyle = 'rgba(0,0,0,0.85)';
+    ctx.strokeText(text, canvasW/2, canvasH/2);
+    ctx.fillStyle = color;
+    ctx.fillText(text, canvasW/2, canvasH/2);
+  }
+  function makeTextSprite(text, color, opts){
+    opts = opts || {};
+    const canvasW = opts.canvasWidth || 128;
+    const canvasH = opts.canvasHeight || 64;
+    const fontSize = opts.fontSize || 44;
+    const canvas = document.createElement('canvas');
+    canvas.width = canvasW; canvas.height = canvasH;
+    const ctx = canvas.getContext('2d');
+    drawSpriteLabel(ctx, text, color, canvasW, canvasH, fontSize);
+    const tex = new THREE.CanvasTexture(canvas);
+    const mat = new THREE.SpriteMaterial({map: tex, depthTest:false});
+    const sprite = new THREE.Sprite(mat);
+    const scaleW = opts.scaleW || 0.5;
+    const scaleH = opts.scaleH || 0.25;
+    sprite.scale.set(scaleW, scaleH, 1);
+    // Stashed so setSpriteText() can redraw this sprite with new text later.
+    sprite.userData.canvas = canvas;
+    sprite.userData.ctx = ctx;
+    sprite.userData.color = color;
+    sprite.userData.canvasW = canvasW;
+    sprite.userData.canvasH = canvasH;
+    sprite.userData.fontSize = fontSize;
+    return sprite;
+  }
+  function setSpriteText(sprite, text){
+    const {ctx, color, canvasW, canvasH, fontSize} = sprite.userData;
+    drawSpriteLabel(ctx, text, color, canvasW, canvasH, fontSize);
+    sprite.material.map.needsUpdate = true;
+  }
+  const xLabel = makeTextSprite('X', '#ff5c5c'); xLabel.position.set(AXIS_LEN+0.3,0,0); frameGroup.add(xLabel);
+  const yLabel = makeTextSprite('Y', '#5cff8a'); yLabel.position.set(0,AXIS_LEN+0.3,0); frameGroup.add(yLabel);
+  const zLabel = makeTextSprite('Z', '#5c9bff'); zLabel.position.set(0,0,AXIS_LEN+0.3); frameGroup.add(zLabel);
+
+  // Once the frame has been rotated away from its original orientation, these
+  // labels switch to primed (X', Y', Z') to signal "these are the transformed
+  // axes, not the original ones" — and switch back the moment it's reset.
+  const IDENTITY_QUAT = new THREE.Quaternion();
+  let labelsArePrimed = false;
+  function updateFrameLabels(){
+    const primed = frameGroup.quaternion.angleTo(IDENTITY_QUAT) > 1e-4;
+    if(primed === labelsArePrimed) return;
+    labelsArePrimed = primed;
+    setSpriteText(xLabel, primed ? "X'" : "X");
+    setSpriteText(yLabel, primed ? "Y'" : "Y");
+    setSpriteText(zLabel, primed ? "Z'" : "Z");
+    originalAxesGroup.visible = primed;
+  }
+
+  // ---------- Orientation gizmo: small inset showing ONLY the original
+  // (starting) orientation, permanently fixed — a pure reference, not a
+  // live comparison. Never rotates, regardless of any transform applied.
+  const gizmoScene = new THREE.Scene();
+  const gizmoCamera = new THREE.PerspectiveCamera(38, 1, 0.1, 10);
+  const gizmoRenderer = new THREE.WebGLRenderer({antialias:true, alpha:true});
+  const GIZMO_SIZE = 128;
+  gizmoRenderer.setSize(GIZMO_SIZE, GIZMO_SIZE);
+  gizmoRenderer.setPixelRatio(window.devicePixelRatio);
+  document.getElementById('gizmoCanvasWrap').appendChild(gizmoRenderer.domElement);
+
+  function makeGizmoAxis(dir, color){
+    const mat = new THREE.LineBasicMaterial({color});
+    const geo = new THREE.BufferGeometry().setFromPoints([
+      new THREE.Vector3(-dir.x,-dir.y,-dir.z),
+      new THREE.Vector3(dir.x, dir.y, dir.z)
+    ]);
+    return new THREE.Line(geo, mat);
+  }
+  gizmoScene.add(makeGizmoAxis(new THREE.Vector3(1,0,0), 0xff5c5c));
+  gizmoScene.add(makeGizmoAxis(new THREE.Vector3(0,1,0), 0x5cff8a));
+  gizmoScene.add(makeGizmoAxis(new THREE.Vector3(0,0,1), 0x5c9bff));
+  const gizmoLabelOpts = {canvasWidth:72, canvasHeight:72, fontSize:48, scaleW:0.42, scaleH:0.42};
+  function makeGizmoLabel(text, color, pos){
+    const s = makeTextSprite(text, color, gizmoLabelOpts);
+    s.position.copy(pos);
+    gizmoScene.add(s);
+  }
+  makeGizmoLabel('X', '#ff5c5c', new THREE.Vector3(1.3,0,0));
+  makeGizmoLabel('Y', '#5cff8a', new THREE.Vector3(0,1.3,0));
+  makeGizmoLabel('Z', '#5c9bff', new THREE.Vector3(0,0,1.3));
+
+  function updateGizmo(){
+    // Camera still tracks the main view's orbit angle (so the gizmo reads
+    // consistently with what's on screen) but the axes it shows never move.
+    const dir = new THREE.Vector3().subVectors(camera.position, controls.target).normalize();
+    gizmoCamera.position.copy(dir.multiplyScalar(4.6));
+    gizmoCamera.up.copy(camera.up);
+    gizmoCamera.lookAt(0,0,0);
+    gizmoRenderer.render(gizmoScene, gizmoCamera);
+  }
+
+  // ---------- Guide sphere (unit-ish, scaled by current r) ----------
+  const sphereGeo = new THREE.SphereGeometry(1, 32, 24);
+  const sphereMat = new THREE.MeshBasicMaterial({color:0x5b8cff, wireframe:true, transparent:true, opacity:0.12});
+  const guideSphere = new THREE.Mesh(sphereGeo, sphereMat);
+  frameGroup.add(guideSphere);
+
+  // ---------- Vector arrow ----------
+  let currentVec = new THREE.Vector3(0,0,0);
+  let definedVec = new THREE.Vector3(0,0,0); // the last "Set Vector p" value, for Reset
+
+  const arrow = new THREE.ArrowHelper(new THREE.Vector3(0,1,0), new THREE.Vector3(0,0,0), 1, 0xffd23d, 0.28, 0.16);
+  frameGroup.add(arrow);
+
+  function updateArrow(){
+    const len = currentVec.length();
+    if(len < 1e-6){
+      arrow.setLength(0.0001, 0, 0);
+      return;
+    }
+    const dir = currentVec.clone().normalize();
+    arrow.setDirection(dir);
+    arrow.setLength(len, Math.min(0.28, len*0.18), Math.min(0.16, len*0.1));
+    guideSphere.scale.setScalar(len);
+  }
+
+  // Convention: theta = polar angle between +Z axis and p, phi = azimuthal
+  // angle in the XY-plane measured from +X axis.
+  // p = r ( sin(theta)cos(phi), sin(theta)sin(phi), cos(theta) )
+  function sphericalFromCartesian(v){
+    const r = v.length();
+    if(r < 1e-9) return {r:0, theta:0, phi:0};
+    const theta = Math.acos(THREE.MathUtils.clamp(v.z/r, -1, 1)); // from +Z
+    let phi = Math.atan2(v.y, v.x); // 0 at +X, 90 deg at +Y
+    if(phi < 0) phi += Math.PI*2;
+    return {r, theta: THREE.MathUtils.radToDeg(theta), phi: THREE.MathUtils.radToDeg(phi)};
+  }
+
+  function cartesianFromSpherical(r, thetaDeg, phiDeg){
+    const theta = THREE.MathUtils.degToRad(thetaDeg);
+    const phi = THREE.MathUtils.degToRad(phiDeg);
+    return new THREE.Vector3(
+      r * Math.sin(theta) * Math.cos(phi),
+      r * Math.sin(theta) * Math.sin(phi),
+      r * Math.cos(theta)
+    );
+  }
+
+  // ---------- Readout ----------
+  const outX = document.getElementById('outX');
+  const outY = document.getElementById('outY');
+  const outZ = document.getElementById('outZ');
+  const outR = document.getElementById('outR');
+  const outTheta = document.getElementById('outTheta');
+  const outPhi = document.getElementById('outPhi');
+
+  function refreshReadout(){
+    outX.textContent = currentVec.x.toFixed(3);
+    outY.textContent = currentVec.y.toFixed(3);
+    outZ.textContent = currentVec.z.toFixed(3);
+    const s = sphericalFromCartesian(currentVec);
+    outR.textContent = s.r.toFixed(3);
+    outTheta.textContent = s.theta.toFixed(2);
+    outPhi.textContent = s.phi.toFixed(2);
+  }
+
+  // ---------- Angle arcs (visual for theta/phi of current vector) ----------
+  const arcGroup = new THREE.Group();
+  frameGroup.add(arcGroup);
+  function rebuildArcs(){
+    arcGroup.clear();
+    if(!document.getElementById('toggleAngleArc').checked) return;
+    const len = currentVec.length();
+    if(len < 1e-6) return;
+    const s = sphericalFromCartesian(currentVec);
+    const R = Math.min(1.1, Math.max(0.5, len*0.5));
+
+    const labelOpts = {canvasWidth:160, canvasHeight:56, fontSize:32, scaleW:0.55, scaleH:0.19};
+    const Rlabel = R * 1.25;
+
+    // phi arc: in xy-plane, from +X axis toward +Y axis, sweeping up to phi
+    {
+      const pts = [];
+      const n = 40;
+      for(let i=0;i<=n;i++){
+        const a = (s.phi * Math.PI/180) * (i/n);
+        pts.push(new THREE.Vector3(R*Math.cos(a), R*Math.sin(a), 0));
+      }
+      const geo = new THREE.BufferGeometry().setFromPoints(pts);
+      const mat = new THREE.LineBasicMaterial({color:0x5cff8a});
+      arcGroup.add(new THREE.Line(geo, mat));
+
+      const aMid = (s.phi * Math.PI/180) * 0.5;
+      const label = makeTextSprite(`φ = ${s.phi.toFixed(1)}°`, '#5cff8a', labelOpts);
+      label.position.set(Rlabel*Math.cos(aMid), Rlabel*Math.sin(aMid), 0);
+      arcGroup.add(label);
+    }
+    // theta arc: from +Z axis down to vector, in the plane containing Z and the vector
+    {
+      const phi = s.phi * Math.PI/180;
+      const pts = [];
+      const n = 40;
+      for(let i=0;i<=n;i++){
+        const t = (s.theta * Math.PI/180) * (i/n);
+        pts.push(new THREE.Vector3(
+          R*Math.sin(t)*Math.cos(phi),
+          R*Math.sin(t)*Math.sin(phi),
+          R*Math.cos(t)
+        ));
+      }
+      const geo = new THREE.BufferGeometry().setFromPoints(pts);
+      const mat = new THREE.LineBasicMaterial({color:0x5c9bff});
+      arcGroup.add(new THREE.Line(geo, mat));
+
+      const tMid = (s.theta * Math.PI/180) * 0.5;
+      const label = makeTextSprite(`θ = ${s.theta.toFixed(1)}°`, '#5c9bff', labelOpts);
+      label.position.set(
+        Rlabel*Math.sin(tMid)*Math.cos(phi),
+        Rlabel*Math.sin(tMid)*Math.sin(phi),
+        Rlabel*Math.cos(tMid)
+      );
+      arcGroup.add(label);
+    }
+  }
+
+  function fullRefresh(){
+    updateArrow();
+    refreshReadout();
+    rebuildArcs();
+  }
+
+  // ---------- Undo history ----------
+  const history = [];
+  const undoBtn = document.getElementById('undoBtn');
+  function pushHistory(){
+    history.push({
+      vec: currentVec.clone(),
+      defined: definedVec.clone(),
+      quat: frameGroup.quaternion.clone()
+    });
+    if(history.length > 50) history.shift();
+    undoBtn.disabled = false;
+  }
+  undoBtn.addEventListener('click', ()=>{
+    if(history.length === 0) return;
+    animRotToken++;   // cancel any in-flight vector rotation/reflection animation
+    animFrameToken++; // cancel any in-flight frame rotation animation
+    animating = false;
+    frameAnimating = false;
+    const snap = history.pop();
+    currentVec.copy(snap.vec);
+    definedVec.copy(snap.defined);
+    frameGroup.quaternion.copy(snap.quat);
+    fullRefresh();
+    undoBtn.disabled = history.length === 0;
+  });
+
+  // ---------- UI wiring: sliders <-> numbers ----------
+  function linkPair(sliderId, numId){
+    const slider = document.getElementById(sliderId);
+    const num = document.getElementById(numId);
+    slider.addEventListener('input', ()=>{ num.value = slider.value; });
+    num.addEventListener('input', ()=>{ slider.value = num.value; });
+  }
+  linkPair('rSlider','rNum');
+  linkPair('thetaSlider','thetaNum');
+  linkPair('phiSlider','phiNum');
+  linkPair('angleSlider','angleNum');
+
+  document.getElementById('setVectorBtn').addEventListener('click', ()=>{
+    pushHistory();
+    const r = parseFloat(document.getElementById('rNum').value);
+    const theta = parseFloat(document.getElementById('thetaNum').value);
+    const phi = parseFloat(document.getElementById('phiNum').value);
+    definedVec = cartesianFromSpherical(r, theta, phi);
+    currentVec.copy(definedVec);
+    fullRefresh();
+  });
+
+  document.getElementById('axisSelect').addEventListener('change', (e)=>{
+    document.getElementById('customAxisRow').style.display = e.target.value === 'custom' ? 'flex' : 'none';
+  });
+  document.getElementById('frameAxisSelect').addEventListener('change', (e)=>{
+    document.getElementById('frameCustomAxisRow').style.display = e.target.value === 'custom' ? 'flex' : 'none';
+  });
+  document.getElementById('reflectPlaneSelect').addEventListener('change', (e)=>{
+    document.getElementById('reflectCustomRow').style.display = e.target.value === 'custom' ? 'flex' : 'none';
+  });
+  linkPair('frameAngleSlider','frameAngleNum');
+
+  // ---------- Animated rotation ----------
+  let animating = false;
+  let animRotToken = 0;
+  function animateRotation(axis, angleDeg){
+    if(animating || currentVec.length() < 1e-9) return;
+    pushHistory();
+    animating = true;
+    const myToken = ++animRotToken;
+    const totalRad = THREE.MathUtils.degToRad(angleDeg);
+    const duration = 700; // ms
+    const start = performance.now();
+    const axisNorm = axis.clone().normalize();
+    const startVec = currentVec.clone();
+
+    function step(now){
+      if(myToken !== animRotToken) return; // cancelled (e.g. by Undo)
+      const t = Math.min(1, (now - start)/duration);
+      const eased = t<0.5 ? 2*t*t : 1-Math.pow(-2*t+2,2)/2; // easeInOutQuad
+      const ang = totalRad * eased;
+      currentVec.copy(startVec).applyAxisAngle(axisNorm, ang);
+      fullRefresh();
+      if(t < 1){
+        requestAnimationFrame(step);
+      } else {
+        animating = false;
+      }
+    }
+    requestAnimationFrame(step);
+  }
+
+  document.getElementById('rotateBtn').addEventListener('click', ()=>{
+    const angle = parseFloat(document.getElementById('angleNum').value);
+    const which = document.getElementById('axisSelect').value;
+    let axis, label;
+    if(which === 'x'){ axis = new THREE.Vector3(1,0,0); label='X axis'; }
+    else if(which === 'y'){ axis = new THREE.Vector3(0,1,0); label='Y axis'; }
+    else if(which === 'z'){ axis = new THREE.Vector3(0,0,1); label='Z axis'; }
+    else {
+      const nx = parseFloat(document.getElementById('nx').value)||0;
+      const ny = parseFloat(document.getElementById('ny').value)||0;
+      const nz = parseFloat(document.getElementById('nz').value)||0;
+      axis = new THREE.Vector3(nx,ny,nz);
+      if(axis.length() < 1e-9){ alert('Custom axis cannot be zero vector'); return; }
+      label = `custom axis (${nx}, ${ny}, ${nz})`;
+    }
+    animateRotation(axis, angle);
+  });
+
+  // ---------- Animated reflection (mirror p across a plane through the origin) ----------
+  // Reflection formula: v' = v - 2(v . n_hat) n_hat, where n_hat is the plane's unit normal.
+  // Animated by linearly sliding the perpendicular component from +d to -d
+  // (the in-plane component never changes), so the vector visibly passes
+  // through the mirror plane.
+  function animateReflection(normal){
+    if(animating || currentVec.length() < 1e-9) return;
+    pushHistory();
+    animating = true;
+    const myToken = ++animRotToken;
+    const n = normal.clone().normalize();
+    const startVec = currentVec.clone();
+    const d = startVec.dot(n);
+    const parallel = startVec.clone().addScaledVector(n, -d); // in-plane component
+    const duration = 700;
+    const start = performance.now();
+
+    function step(now){
+      if(myToken !== animRotToken) return; // cancelled (e.g. by Undo)
+      const t = Math.min(1, (now - start)/duration);
+      const eased = t<0.5 ? 2*t*t : 1-Math.pow(-2*t+2,2)/2;
+      const factor = 1 - 2*eased; // +1 -> -1
+      currentVec.copy(parallel).addScaledVector(n, d*factor);
+      fullRefresh();
+      if(t < 1){
+        requestAnimationFrame(step);
+      } else {
+        animating = false;
+      }
+    }
+    requestAnimationFrame(step);
+  }
+
+  document.getElementById('reflectBtn').addEventListener('click', ()=>{
+    const which = document.getElementById('reflectPlaneSelect').value;
+    let normal, label;
+    if(which === 'xy'){ normal = new THREE.Vector3(0,0,1); label='XY plane'; }
+    else if(which === 'yz'){ normal = new THREE.Vector3(1,0,0); label='YZ plane'; }
+    else if(which === 'xz'){ normal = new THREE.Vector3(0,1,0); label='XZ plane'; }
+    else {
+      const nx = parseFloat(document.getElementById('rnx').value)||0;
+      const ny = parseFloat(document.getElementById('rny').value)||0;
+      const nz = parseFloat(document.getElementById('rnz').value)||0;
+      normal = new THREE.Vector3(nx,ny,nz);
+      if(normal.length() < 1e-9){ alert('Plane normal cannot be zero vector'); return; }
+      label = `custom plane (normal ${nx}, ${ny}, ${nz})`;
+    }
+    animateReflection(normal);
+  });
+
+  // ---------- Animated frame rotation/reflection (axes + labels + grid + p, all together) ----------
+  let frameAnimating = false;
+  let animFrameToken = 0;
+  // Animates frameGroup's quaternion AND scale simultaneously toward the
+  function animateFrameToQuaternion(targetQuat){
+    if(frameAnimating) return;
+    pushHistory();
+    frameAnimating = true;
+    const myToken = ++animFrameToken;
+    const startQuat = frameGroup.quaternion.clone();
+    const duration = 700;
+    const start = performance.now();
+
+    function step(now){
+      if(myToken !== animFrameToken) return; // cancelled (e.g. by Undo)
+      const t = Math.min(1, (now - start)/duration);
+      const eased = t<0.5 ? 2*t*t : 1-Math.pow(-2*t+2,2)/2;
+      frameGroup.quaternion.copy(startQuat).slerp(targetQuat, eased);
+      if(t < 1){
+        requestAnimationFrame(step);
+      } else {
+        frameAnimating = false;
+      }
+    }
+    requestAnimationFrame(step);
+  }
+
+  function animateFrameRotation(axis, angleDeg){
+    const axisNorm = axis.clone().normalize();
+    const deltaQuat = new THREE.Quaternion().setFromAxisAngle(axisNorm, THREE.MathUtils.degToRad(angleDeg));
+    // Intrinsic composition: "X/Y/Z axis" always means the frame's CURRENT
+    // (already-rotated) axis, exactly as currently displayed — so repeated
+    // rotations always apply precisely the entered angle relative to what
+    // you see, not relative to the original fixed axes.
+    const targetQuat = frameGroup.quaternion.clone().multiply(deltaQuat);
+    animateFrameToQuaternion(targetQuat);
+  }
+
+  document.getElementById('frameRotateBtn').addEventListener('click', ()=>{
+    const angle = parseFloat(document.getElementById('frameAngleNum').value);
+    const which = document.getElementById('frameAxisSelect').value;
+    let axis, label;
+    if(which === 'x'){ axis = new THREE.Vector3(1,0,0); label='X axis'; }
+    else if(which === 'y'){ axis = new THREE.Vector3(0,1,0); label='Y axis'; }
+    else if(which === 'z'){ axis = new THREE.Vector3(0,0,1); label='Z axis'; }
+    else {
+      const nx = parseFloat(document.getElementById('fnx').value)||0;
+      const ny = parseFloat(document.getElementById('fny').value)||0;
+      const nz = parseFloat(document.getElementById('fnz').value)||0;
+      axis = new THREE.Vector3(nx,ny,nz);
+      if(axis.length() < 1e-9){ alert('Custom axis cannot be zero vector'); return; }
+      label = `custom axis (${nx}, ${ny}, ${nz})`;
+    }
+    animateFrameRotation(axis, angle);
+  });
+
+  document.getElementById('resetFrameBtn').addEventListener('click', ()=>{
+    animateFrameToQuaternion(new THREE.Quaternion());
+  });
+
+  document.getElementById('scaleUpBtn').addEventListener('click', ()=>{
+    pushHistory();
+    currentVec.multiplyScalar(1.25);
+    fullRefresh();
+  });
+  document.getElementById('scaleDownBtn').addEventListener('click', ()=>{
+    pushHistory();
+    currentVec.multiplyScalar(0.8);
+    fullRefresh();
+  });
+  document.getElementById('normalizeBtn').addEventListener('click', ()=>{
+    if(currentVec.length() < 1e-9) return;
+    pushHistory();
+    currentVec.normalize();
+    fullRefresh();
+  });
+  document.getElementById('negateBtn').addEventListener('click', ()=>{
+    pushHistory();
+    currentVec.negate();
+    fullRefresh();
+  });
+  document.getElementById('resetBtn').addEventListener('click', ()=>{
+    pushHistory();
+    currentVec.copy(definedVec);
+    fullRefresh();
+  });
+
+  document.getElementById('toggleSphere').addEventListener('change', (e)=>{
+    guideSphere.visible = e.target.checked;
+  });
+  document.getElementById('toggleAngleArc').addEventListener('change', rebuildArcs);
+
+  // ---------- init ----------
+  definedVec = cartesianFromSpherical(2, 60, 45);
+  currentVec.copy(definedVec);
+  fullRefresh();
+
+  // ---------- render loop ----------
+  window.addEventListener('resize', ()=>{
+    camera.aspect = window.innerWidth/window.innerHeight;
+    camera.updateProjectionMatrix();
+    renderer.setSize(window.innerWidth, window.innerHeight);
+  });
+
+  function animate(){
+    requestAnimationFrame(animate);
+    controls.update();
+    updateFrameLabels();
+    renderer.render(scene, camera);
+    updateGizmo();
+  }
+  animate();
+})();
+</script>
+</body>
+</html>
