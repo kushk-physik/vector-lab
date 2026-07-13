@@ -505,14 +505,18 @@
   let currentVec = new THREE.Vector3(0,0,0);
   let definedVec = new THREE.Vector3(0,0,0); // the last "Set Vector p" value, for Reset
 
-  const arrow = new THREE.ArrowHelper(new THREE.Vector3(0,1,0), new THREE.Vector3(0,0,0), 1, 0xffd23d, 0.28, 0.16);
+  const ARROW_COLOR = 0xffd23d;
+  const ARROW_HOVER_COLOR = 0xfff2a8;
+  const arrow = new THREE.ArrowHelper(new THREE.Vector3(0,1,0), new THREE.Vector3(0,0,0), 1, ARROW_COLOR, 0.28, 0.16);
   frameGroup.add(arrow);
 
-  // Draggable handle at the tip of p — lets you grab and drag the vector's
-  // direction directly in 3D instead of only via the θ/φ sliders.
+  // Invisible hit-target at the tip of p — lets you grab and drag the
+  // vector's direction directly in 3D. Not rendered (the arrowhead itself
+  // is the only visible tip); it just gives the raycaster something a bit
+  // more forgiving than the arrowhead's exact cone geometry to hit.
   const dragHandle = new THREE.Mesh(
     new THREE.SphereGeometry(1, 16, 16),
-    new THREE.MeshBasicMaterial({color:0xffd23d})
+    new THREE.MeshBasicMaterial({color:ARROW_COLOR, transparent:true, opacity:0})
   );
   frameGroup.add(dragHandle);
 
@@ -529,7 +533,7 @@
     arrow.setLength(len, Math.min(0.28, len*0.18), Math.min(0.16, len*0.1));
     guideSphere.scale.setScalar(len);
     dragHandle.position.copy(currentVec);
-    dragHandle.scale.setScalar(Math.max(0.13, Math.min(0.22, len*0.12)));
+    dragHandle.scale.setScalar(Math.max(0.16, Math.min(0.3, len*0.16)));
   }
 
   // ---------- Second vector q, for angle/dot/cross comparisons ----------
@@ -1165,17 +1169,19 @@ ${row(2)}`;
     draggingTip = true;
     controls.enabled = false;
     renderer.domElement.style.cursor = 'grabbing';
+    arrow.setColor(ARROW_HOVER_COLOR);
     pushHistory();
     evt.preventDefault();
   });
 
   window.addEventListener('pointermove', (evt)=>{
     if(!draggingTip){
-      // hover feedback only
+      // hover feedback only: brighten the arrowhead so it reads as grabbable
       setPointerNDC(evt);
       raycaster.setFromCamera(pointerNDC, camera);
       const hit = raycaster.intersectObject(dragHandle)[0];
       renderer.domElement.style.cursor = hit ? 'grab' : 'default';
+      arrow.setColor(hit ? ARROW_HOVER_COLOR : ARROW_COLOR);
       return;
     }
     setPointerNDC(evt);
@@ -1196,6 +1202,7 @@ ${row(2)}`;
     draggingTip = false;
     controls.enabled = true;
     renderer.domElement.style.cursor = 'default';
+    arrow.setColor(ARROW_COLOR);
   });
 
   // ---------- init ----------
