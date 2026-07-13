@@ -1,16 +1,14 @@
 # Vector Lab
 
+**Live demo: https://kushk-physik.github.io/vector-lab/**
+
 A single-file 3D tool for building intuition about spherical coordinates, rotations, and reflections. Define a vector by (r, θ, φ), transform it, and watch the angles update in real time in an actual 3D scene. No build step, no dependencies beyond Three.js loaded from a CDN.
 
 ![Vector Lab screenshot](screenshot.png)
 
 ## Try it
 
-Just open `index.html` in a browser, it's fully self-contained. If GitHub Pages is enabled for this repo (Settings → Pages → Deploy from branch → `main` / root), it'll also be live at:
-
-```
-https://<your-username>.github.io/<repo-name>/
-```
+Open the [live demo](https://kushk-physik.github.io/vector-lab/) in any browser — nothing to install. Or grab `index.html` and open it locally; it's fully self-contained.
 
 ## What it does
 
