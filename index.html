@@ -861,10 +861,12 @@
   // ---------- Animated rotation ----------
   let animating = false;
   let animRotToken = 0;
+  let animWatchdogStart = 0;
   function animateRotation(axis, angleDeg){
     if(animating || currentVec.length() < 1e-9) return;
     pushHistory();
     animating = true;
+    animWatchdogStart = performance.now();
     const myToken = ++animRotToken;
     const totalRad = THREE.MathUtils.degToRad(angleDeg);
     const duration = 700; // ms
@@ -915,6 +917,7 @@
     if(animating || currentVec.length() < 1e-9) return;
     pushHistory();
     animating = true;
+    animWatchdogStart = performance.now();
     const myToken = ++animRotToken;
     const n = normal.clone().normalize();
     const startVec = currentVec.clone();
@@ -959,11 +962,13 @@
   // ---------- Animated frame rotation/reflection (axes + labels + grid + p, all together) ----------
   let frameAnimating = false;
   let animFrameToken = 0;
+  let frameAnimWatchdogStart = 0;
   // Animates frameGroup's quaternion AND scale simultaneously toward the
   function animateFrameToQuaternion(targetQuat){
     if(frameAnimating) return;
     pushHistory();
     frameAnimating = true;
+    frameAnimWatchdogStart = performance.now();
     const myToken = ++animFrameToken;
     const startQuat = frameGroup.quaternion.clone();
     const duration = 700;
@@ -1156,6 +1161,7 @@ ${row(2)}`;
   const raycaster = new THREE.Raycaster();
   const pointerNDC = new THREE.Vector2();
   let draggingTip = false;
+  let lastTipMoveTime = 0;
 
   function setPointerNDC(evt){
     const rect = renderer.domElement.getBoundingClientRect();
@@ -1170,6 +1176,7 @@ ${row(2)}`;
     const hit = raycaster.intersectObject(dragHandle)[0];
     if(!hit) return;
     draggingTip = true;
+    lastTipMoveTime = performance.now();
     controls.enabled = false;
     renderer.domElement.style.cursor = 'grabbing';
     arrow.setColor(ARROW_HOVER_COLOR);
@@ -1187,6 +1194,7 @@ ${row(2)}`;
       arrow.setColor(hit ? ARROW_HOVER_COLOR : ARROW_COLOR);
       return;
     }
+    lastTipMoveTime = performance.now();
     setPointerNDC(evt);
     raycaster.setFromCamera(pointerNDC, camera);
     const radius = currentVec.length();
@@ -1240,8 +1248,29 @@ ${row(2)}`;
     renderer.setSize(window.innerWidth, window.innerHeight);
   });
 
+  // Self-healing safety net: on some mobile browsers a touch gesture can be
+  // silently stolen by the OS (edge-swipe, app-switch gesture) without ever
+  // delivering pointerup/pointercancel/visibilitychange to the page. Rather
+  // than rely on catching every such event, these invariants get re-checked
+  // every single frame, so a stuck state can never last more than a moment:
+  //  - orbit controls must be enabled whenever we're not actively dragging p
+  //  - a tip-drag with no movement for 2s is treated as abandoned and released
+  //  - an animation still "in progress" long after its 700ms duration is done
+  //    is treated as stuck (rAF got paused mid-flight) and force-cleared
+  function watchdogTick(){
+    const now = performance.now();
+    if(draggingTip){
+      if(now - lastTipMoveTime > 2000) releaseTipDrag();
+    } else if(!controls.enabled){
+      controls.enabled = true;
+    }
+    if(animating && now - animWatchdogStart > 2500) animating = false;
+    if(frameAnimating && now - frameAnimWatchdogStart > 2500) frameAnimating = false;
+  }
+
   function animate(){
     requestAnimationFrame(animate);
+    watchdogTick();
     controls.update();
     updateFrameLabels();
     updateMathPanel();
